@@ -1,0 +1,63 @@
+# 拾光工具箱 · Shiguang Toolbox 0.3.0
+
+Windows 10/11 x64 中文图片与 PDF 工具箱。文件处理全部在本地完成，没有账号、云端上传或遥测。
+
+## 安装与日常使用
+
+运行 **ShiguangToolbox-Setup-0.3.0-x64.exe**，按向导选择安装位置和快捷方式。安装后可在 Windows“已安装的应用”中找到并卸载“拾光工具箱”。默认按当前 Windows 用户安装，无需管理员权限。
+
+- 桌面或开始菜单可打开软件；安装时可选桌面快捷方式、右键菜单、开机启动。
+- 关闭窗口收起到通知区域托盘（可能在任务栏上箭头内）。双击托盘图标或选择“打开工具箱”恢复；选择“退出”彻底关闭。
+- 右键图片/PDF 即可启动软件，已运行时唤起同一窗口。正在处理时，新导入文件会在任务完成后加入。
+- Windows 11 的入口在“显示更多选项”内。多选文件推荐“发送到 → 拾光工具箱”，可一次传入多个路径。
+- 静态右键入口采用 Windows Player 选择模型；超过系统选择数量或命令行长度限制时请拖入窗口。
+- “应用与右键设置”可以开关登录启动、修复或移除右键入口。开机启动默认不勾选。
+- 卸载移除程序、快捷方式、右键入口和开机启动项，保留原文件与已导出文件。
+
+没有 Python 也能运行。另提供便携版 ZIP；便携版不创建应用列表条目。
+
+## 图片功能
+
+批量压缩、目标 KB 压缩、JPG/PNG/WEBP/BMP/TIFF 转换、尺寸/DPI 调整、文字/图片水印、裁剪、旋转、重命名副本、横向/纵向/宫格拼图、多图转 PDF 与打印。
+
+拼图支持实时预览、调序、间距、外边距、背景色和宫格列数。预览支持缩放、平移、适应窗口。裁剪、旋转、水印、尺寸调整显示当前素材效果；导出处理所有适用素材。不会覆盖原文件。
+
+大图采用最长边不超过 1800 px 的预览，不代表原图逐像素质量。压缩预览不模拟最终编码质量或目标尺寸。透明图片压缩为 JPG 时使用白底。
+
+## PDF 功能
+
+无损压缩、扫描件压缩、图片转 PDF、PDF 转 PNG、合并、每页拆分、提取/删除/旋转页面。页码从 1 开始，可填写 `1,3-5`；删除必须明确填写，不能删除全部页面。
+
+扫描件压缩会将页面转成图片，移除文字层、链接和表单；无损压缩不保证变小。多图打印先生成 A4 PDF，再由系统阅读器打印。
+
+## 数据位置
+
+默认输出到文档目录的“拾光工具箱输出”，每次任务有独立子目录与报告。单实例消息暂存到当前用户本地应用数据目录的 `ShiguangToolbox/inbox`，消息消费后删除，不通过网络通信。卸载保留用户输出。
+
+## 从源码构建
+
+需要 Windows x64、Python 3.12（含 Tcl/Tk）及 Inno Setup 6。
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+.\.venv\Scripts\python.exe build.py
+.\.venv\Scripts\python.exe package_release.py
+& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer\ShiguangToolbox.iss
+.\.venv\Scripts\python.exe package_release.py --checksums-only
+```
+
+产物位于 `release/v0.3.0/`。桌面生命周期测试为 `tests/check_lifecycle.py`；菜单集成测试使用随机测试入口，结束后移除。
+
+## GitHub 发布
+
+源码包可以直接放入自己的仓库。不要上传虚拟环境、缓存、测试输出或用户文件。打包脚本生成独立的 `github-source` 目录；包含源码、测试、安装脚本、许可和 GitHub Actions 工作流。
+
+启用仓库 Actions 后，推送 `v0.3.0` 标签可触发 Windows 构建并发布安装包、源码包和校验文件到 Releases；手动运行工作流只生成构建产物。首次远程构建仍需在自己的仓库验证。
+
+## 限制与许可
+
+尚未提供 HEIC/RAW、加密 PDF、智能抠图、PDF 页面预览；动画和多页 TIFF 仅处理首帧。尚未完成独立 Windows 10、高 DPI 和多显示器测试。安装包未进行代码签名；少数安装系统错误信息使用英文。
+
+本项目采用 **AGPL-3.0-or-later**，完整许可见 LICENSE。PyMuPDF/MuPDF 采用 AGPL 或商业许可；Pillow、pystray、tkinterdnd2、Tcl/Tk 等保留各自许可。发布包附带完整项目源码和第三方许可，分发时请保留。构建依赖由 requirements.txt 重建。
