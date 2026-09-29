@@ -17,7 +17,7 @@ FIELDS={
     'stitch':['layout','columns','width','gap','margin','background','format','quality'],
     'images_pdf':['quality'], 'pdf_compress':['pdf_mode','quality','dpi'],
     'pdf_images':['pages','dpi'], 'pdf_split':['pages'], 'pdf_extract':['pages'],
-    'pdf_delete':['pages'], 'pdf_rotate':['pages','angle'], 'pdf_merge':[]}
+    'pdf_delete':['pages'], 'pdf_rotate':['pages','angle'], 'pdf_merge':[], 'pdf_edit':[]}
 DEFAULTS={'quality':'85','target_kb':'0','format':'JPG','width':'0','height':'0','dpi':'150',
           'text':'','font_size':'36','opacity':'60','position':'右下角','watermark_path':'',
           'crop':'0,0,800,600','angle':'90','pages':'','layout':'宫格',
@@ -33,7 +33,7 @@ CHOICES={'format':['JPG','PNG','WEBP','BMP','TIFF'],'angle':['90','180','270'],
          'position':['右下角','居中'],'layout':['纵向','横向','宫格'],
          'pdf_mode':['无损压缩（保留文字）','扫描件压缩（页面转图片）']}
 SHORT=['压缩图片','转换格式','尺寸与 DPI','文字与水印','裁剪图片','旋转图片','批量重命名',
-       '多图拼接','图片转 PDF / 打印','压缩 PDF','PDF 转图片','合并 PDF','拆分 PDF','提取页面','删除页面','旋转页面']
+       '多图拼接','图片转 PDF / 打印','压缩 PDF','PDF 转图片','合并 PDF','拆分 PDF','提取页面','删除页面','旋转页面','编辑 PDF']
 
 class RoundButton(tk.Canvas):
     def __init__(self, parent, text, command, width=120, height=38, fill=TEAL, fg='white', bg='white'):
@@ -76,26 +76,27 @@ class StudioUI:
         style.configure('Horizontal.TProgressbar',background=TEAL,troughcolor='#e9f0f3',borderwidth=0)
         self.op=tk.StringVar(value='多图拼接')
         sidebar=tk.Frame(self,bg=NAV,width=192);sidebar.pack(side='left',fill='y');sidebar.pack_propagate(False)
-        tk.Label(sidebar,text='拾光  /  STUDIO',bg=NAV,fg='white',font=('Microsoft YaHei UI',16,'bold')).pack(anchor='w',padx=18,pady=(25,4))
-        tk.Label(sidebar,text='本地图片与 PDF 工作台',bg=NAV,fg='#8ea8bc',font=('Microsoft YaHei UI',9)).pack(anchor='w',padx=18,pady=(0,20))
+        tk.Label(sidebar,text='Toolbox',bg=NAV,fg='white',font=('Microsoft YaHei UI',16,'bold')).pack(anchor='w',padx=18,pady=(25,4))
+        tk.Label(sidebar,text='图片 / PDF',bg=NAV,fg='#8ea8bc',font=('Microsoft YaHei UI',9)).pack(anchor='w',padx=18,pady=(0,20))
         self.nav_buttons={}
         for i,(title,op) in enumerate(OPS.items()):
             if i in (0,9):tk.Label(sidebar,text='图片工具' if i==0 else 'PDF 工具',bg=NAV,fg='#7c98ae',font=('Microsoft YaHei UI',9)).pack(anchor='w',padx=20,pady=(6,5))
             btn=RoundButton(sidebar,SHORT[i],lambda title=title:self.select_tool(title),width=170,height=28,fill=NAV,fg='#d4e0e9',bg=NAV)
             btn.pack(fill='x',padx=10,pady=1);self.nav_buttons[title]=btn
-        tk.Label(sidebar,text='●  完全本地 · 原文件保留',bg=NAV,fg='#79cdbf',font=('Microsoft YaHei UI',9)).pack(side='bottom',pady=16)
         ttk.Button(sidebar,text='应用与右键设置',command=self.menu_settings).pack(side='bottom',fill='x',padx=14,pady=4)
 
         shell=tk.Frame(self,bg=BG);shell.pack(side='left',fill='both',expand=True,padx=20,pady=18)
         header=tk.Frame(shell,bg=BG);header.pack(fill='x',pady=(0,16))
         self.heading=tk.Label(header,text='多图拼接',bg=BG,fg=INK,font=('Microsoft YaHei UI',22,'bold'));self.heading.pack(side='left')
-        tk.Label(header,text='先看效果，再安心导出',bg=BG,fg=MUTED,font=('Microsoft YaHei UI',10)).pack(side='left',padx=18,pady=(8,0))
         RoundButton(header,'＋ 添加文件',self.add_dialog,width=126,bg=BG).pack(side='right')
         body=tk.Frame(shell,bg=BG);body.pack(fill='both',expand=True)
         right=tk.Frame(body,bg='white',width=286,highlightbackground='#e3eaf0',highlightthickness=1);right.pack(side='right',fill='y',padx=(16,0));right.pack_propagate(False)
         center=tk.Frame(body,bg=BG);center.pack(side='left',fill='both',expand=True)
+        from .pdf_editor import PDFEditor
+        self.pdf_editor=PDFEditor(center,self)
 
         card=tk.Frame(center,bg='white',highlightbackground='#e3eaf0',highlightthickness=1);card.pack(fill='both',expand=True)
+        self.preview_card=card
         bar=tk.Frame(card,bg='white');bar.pack(fill='x',padx=16,pady=12)
         tk.Label(bar,text='效果预览',bg='white',fg=INK,font=('Microsoft YaHei UI',11,'bold')).pack(side='left')
         self.zoom_text=tk.StringVar(value='适应窗口')
@@ -103,6 +104,12 @@ class StudioUI:
         ttk.Button(bar,text='＋',width=3,command=lambda:self.change_zoom(1.25)).pack(side='right',padx=(3,6))
         ttk.Label(bar,textvariable=self.zoom_text,width=9,anchor='center').pack(side='right')
         ttk.Button(bar,text='－',width=3,command=lambda:self.change_zoom(.8)).pack(side='right',padx=3)
+        self.pdf_page=0;self.pdf_total=0;self.pdf_preview_path=None
+        self.pdf_nav=ttk.Frame(card);self.pdf_page_text=tk.StringVar(value='')
+        ttk.Button(self.pdf_nav,text='上一页',command=lambda:self.turn_pdf(-1)).pack(side='left',padx=4)
+        ttk.Label(self.pdf_nav,textvariable=self.pdf_page_text).pack(side='left',padx=10)
+        ttk.Button(self.pdf_nav,text='下一页',command=lambda:self.turn_pdf(1)).pack(side='left',padx=4)
+        ttk.Button(self.pdf_nav,text='编辑此 PDF',command=self.edit_preview_pdf).pack(side='right',padx=4)
         area=tk.Frame(card,bg='#e8eef2');area.pack(fill='both',expand=True,padx=12)
         self.preview_canvas=tk.Canvas(area,bg='#e8eef2',highlightthickness=0,cursor='fleur')
         self.preview_canvas.grid(row=0,column=0,sticky='nsew');area.rowconfigure(0,weight=1);area.columnconfigure(0,weight=1)
@@ -117,6 +124,7 @@ class StudioUI:
         ttk.Label(card,textvariable=self.preview_meta,foreground=MUTED,wraplength=600).pack(anchor='w',padx=16,pady=10)
 
         files_card=tk.Frame(center,bg='white',highlightbackground='#e3eaf0',highlightthickness=1);files_card.pack(fill='x',pady=(14,0))
+        self.files_card=files_card
         toolbar=tk.Frame(files_card,bg='white');toolbar.pack(fill='x',padx=10,pady=9)
         self.file_count=tk.StringVar(value='素材 · 0')
         ttk.Label(toolbar,textvariable=self.file_count,font=('Microsoft YaHei UI',10,'bold')).pack(side='left',padx=4)
@@ -136,13 +144,13 @@ class StudioUI:
         self.hint=ttk.Label(export,text='',foreground=MUTED,wraplength=245,font=('Microsoft YaHei UI',9));self.hint.pack(anchor='w',pady=(0,12))
         ttk.Separator(export).pack(fill='x',pady=(0,12))
         ttk.Label(export,text='输出到',foreground=MUTED).pack(anchor='w')
-        self.output=tk.StringVar(value=str(Path.home()/'Documents'/'拾光工具箱输出'))
+        self.output=tk.StringVar(value=str(Path.home()/'Documents'/'Toolbox输出'))
         ttk.Entry(export,textvariable=self.output).pack(fill='x',pady=6)
         output_row=ttk.Frame(export);output_row.pack(fill='x')
         ttk.Button(output_row,text='选择目录',command=self.choose_output).pack(side='left')
         ttk.Button(output_row,text='打开结果',command=self.open_output).pack(side='right')
-        self.start_button=RoundButton(export,'导出到本地',self.start,height=42);self.start_button.pack(fill='x',pady=(12,6))
-        other=ttk.Frame(export);other.pack(fill='x')
+        self.start_button=RoundButton(export,'导出',self.start,height=42);self.start_button.pack(fill='x',pady=(12,6))
+        other=ttk.Frame(export);other.pack(fill='x');self.export_other=other
         ttk.Button(other,text='取消任务',command=self.cancel.set).pack(side='left')
         ttk.Button(other,text='打开打印 PDF',command=self.open_print).pack(side='right')
         param_area=ttk.Frame(right);param_area.pack(fill='both',expand=True,padx=12)
@@ -166,6 +174,7 @@ class StudioUI:
             for control in (box,row,field):control.bind('<MouseWheel>',self.scroll_params)
         self.keep_ratio=tk.BooleanVar(value=True);self.keep_ratio.trace_add('write',self.schedule_preview)
         self.ratio_widget=ttk.Checkbutton(self.params,text='保持宽高比例',variable=self.keep_ratio)
+        self.pdf_settings=self.pdf_editor.build_controls(self.params)
         self.status=tk.StringVar(value='准备就绪')
         self.progress=ttk.Progressbar(shell,mode='determinate');self.progress.pack(fill='x',pady=(14,6))
         tk.Label(shell,textvariable=self.status,bg=BG,fg=MUTED,anchor='w',font=('Microsoft YaHei UI',9)).pack(fill='x')
@@ -174,15 +183,29 @@ class StudioUI:
         self.update_fields()
 
     def select_tool(self,title):
+        if self.busy:return
         self.op.set(title);self.update_fields()
     def scroll_params(self,event):
         self.param_canvas.yview_scroll(-1 if event.delta>0 else 1,'units');return 'break'
     def update_fields(self,*_):
         op=OPS[self.op.get()];self.heading.configure(text=self.op.get())
+        if op=='pdf_edit':
+            self.preview_card.pack_forget();self.files_card.pack_forget();self.pdf_editor.pack(fill='both',expand=True)
+            if self.pdf_editor.model is None:
+                pdfs=[p for p in self.files if p.suffix.lower()=='.pdf']
+                if pdfs:self.pdf_editor.open(pdfs[0])
+        else:
+            self.pdf_editor.pack_forget()
+            self.preview_card.pack(fill='both',expand=True);self.files_card.pack(fill='x',pady=(14,0))
+        self.start_button.configure(text='另存 PDF' if op=='pdf_edit' else '导出')
+        self.pdf_nav.pack_forget()
+        if op.startswith('pdf_') and op!='pdf_edit':self.pdf_nav.pack(fill='x',before=self.preview_canvas.master,padx=12,pady=(0,6))
         for title,btn in self.nav_buttons.items():
             btn.fill=TEAL if title==self.op.get() else NAV;btn.fg='white' if title==self.op.get() else '#d4e0e9';btn.draw()
         for w in self.widgets.values():w.grid_forget()
-        self.ratio_widget.grid_forget()
+        self.ratio_widget.grid_forget();self.pdf_settings.grid_forget()
+        if op=='pdf_edit':self.pdf_settings.grid(row=0,column=0,columnspan=2,sticky='ew',padx=5);self.export_other.pack_forget()
+        else:self.export_other.pack(fill='x')
         groups={'stitch':[['layout'],['columns','width'],['gap','margin'],['background'],['format','quality']],
                 'resize':[['width','height'],['dpi','format']],
                 'watermark':[['text'],['watermark_path'],['font_size','opacity'],['position','format']]}.get(op,[[key] for key in FIELDS[op]])
@@ -190,12 +213,12 @@ class StudioUI:
             for col,key in enumerate(keys):self.widgets[key].grid(row=row,column=col,columnspan=2 if len(keys)==1 else 1,sticky='ew',padx=3,pady=(0,12))
         self.params.columnconfigure(0,weight=1,uniform='settings');self.params.columnconfigure(1,weight=1,uniform='settings')
         if op=='resize':self.ratio_widget.grid(row=len(groups),column=0,columnspan=2,sticky='w',pady=5)
-        hints={'stitch':'全部图片按列表顺序拼接。间距、外边距按导出像素计；透明区域使用所选背景色。',
+        hints={'stitch':'间距和外边距以像素计。',
                'compress':'压缩预览仅展示原图构图。指定大小可能降低清晰度和尺寸，以导出结果为准。',
                'pdf_compress':'扫描件模式将页面转为图片，会移除文字层、链接和表单。无损模式不保证变小。',
                'images_pdf':'每张图片生成一页 A4，导出后在 PDF 阅读器中确认打印。',
-               'watermark':'选择图片水印后优先使用图片。预览使用缩略图，文字边缘以导出为准。'}
-        self.hint.configure(text=hints.get(op,'每次导出创建独立目录，保留原文件。图片预览跟随列表选中项。'))
+               'watermark':'选择图片水印后优先使用图片。'}
+        self.hint.configure(text=hints.get(op,''))
         self.param_canvas.yview_moveto(0);self.zoom=None;self.schedule_preview()
     def pick_color(self):
         result=colorchooser.askcolor(parent=self,color=self.vars['background'].get() if self.valid_color() else '#ffffff',title='拼图背景颜色')
@@ -230,12 +253,22 @@ class StudioUI:
         self.preview_timer=self.after(250,self.request_preview)
     def request_preview(self):
         self.preview_timer=None;op=OPS[self.op.get()]
-        if op.startswith('pdf_') or op=='images_pdf':
-            self.preview_image=None;self.empty_message='PDF 工具已就绪\n添加文件并设置参数，即可导出到本地'
-            self.preview_meta.set('本次新增预览适用于图片工具；PDF 不显示页面预览。');self.draw_preview();return
+        if op=='pdf_edit':return
+        if op.startswith('pdf_'):
+            files=[p for p in self.files if p.suffix.lower()=='.pdf']
+            if not files:
+                self.preview_image=None;self.empty_message='添加 PDF';self.preview_meta.set('');self.draw_preview();return
+            selected=self.tree.selection()
+            chosen=self.files[int(selected[0])] if selected else files[0]
+            chosen=chosen if chosen in files else files[0]
+            if chosen!=self.pdf_preview_path:self.pdf_page=0;self.pdf_preview_path=chosen
+            request=(self.preview_revision,[chosen],op,{'_pdf_page':self.pdf_page})
+            try:self.preview_requests.get_nowait()
+            except queue.Empty:pass
+            self.preview_requests.put_nowait(request);return
         files=[p for p in self.files if p.suffix.lower() in IMAGE_EXTS]
         if not files:
-            self.preview_image=None;self.empty_message='把图片拖到这里\n从一张图片，开始你的创作'
+            self.preview_image=None;self.empty_message='拖入文件或点击添加'
             self.preview_meta.set('支持 JPG、PNG、WEBP、BMP、TIFF · 可拖入多张');self.draw_preview();return
         if op!='stitch':
             selected=self.tree.selection()
@@ -253,6 +286,10 @@ class StudioUI:
             try:revision,files,op,opts=self.preview_requests.get(timeout=.3)
             except queue.Empty:continue
             try:
+                if op.startswith('pdf_'):
+                    from .pdf_document import preview_file
+                    im,size,index,total=preview_file(files[0],opts['_pdf_page'])
+                    self.events.put(('pdf_preview',revision,im,size,files[0].name,index,total));continue
                 if op=='stitch':im,size=render_collage(files,opts,preview_limit=1800)
                 else:
                     im,size=render_single(files[0],op,opts,preview_limit=1800)
@@ -261,7 +298,18 @@ class StudioUI:
                         im=rgb(im)
                 self.events.put(('preview',revision,im,size,f'{len(files)} 张图片' if op=='stitch' else files[0].name,op))
             except Exception as e:self.events.put(('preview_error',revision,str(e)))
+    def turn_pdf(self,step):
+        self.pdf_page=max(0,min(self.pdf_page+step,self.pdf_total-1));self.schedule_preview()
+    def edit_preview_pdf(self):
+        if self.pdf_preview_path:
+            if self.pdf_editor.open(self.pdf_preview_path):
+                self.pdf_editor.index=min(self.pdf_page,len(self.pdf_editor.model)-1)
+                self.pdf_editor.refresh();self.select_tool('PDF 编辑')
     def accept_preview(self,event):
+        if event[0]=='pdf_preview':
+            if event[1]!=self.preview_revision:event[2].close();return
+            self.pdf_page=event[5];self.pdf_total=event[6];self.pdf_page_text.set(f'{event[5]+1} / {event[6]}')
+            event=('preview',event[1],event[2],event[3],event[4],'pdf_page')
         if event[1]!=self.preview_revision:
             if event[0]=='preview':event[2].close()
             return
@@ -270,6 +318,8 @@ class StudioUI:
             self.preview_image=None;self.empty_message='暂时无法预览';self.preview_meta.set(event[2])
         else:
             self.preview_image=event[2];self.preview_size=event[3]
+            if event[5]=='pdf_page':
+                self.preview_meta.set(f'{event[4]} · 第 {self.pdf_page+1} 页');self.draw_preview();return
             note='构图参考 · 压缩后的尺寸以实际导出为准' if event[5]=='compress' else '导出尺寸'
             self.preview_meta.set(f'{event[4]}  ·  {note} {event[3][0]:,} × {event[3][1]:,} px  ·  滚轮缩放 / 拖动平移')
         self.draw_preview()
@@ -283,7 +333,7 @@ class StudioUI:
         if self.preview_image is None:
             canvas.configure(scrollregion=(0,0,w,h))
             canvas.create_text(w/2,h/2-45,text='▧',fill='#9aafb9',font=('Segoe UI',42))
-            canvas.create_text(w/2,h/2+22,text=getattr(self,'empty_message','把图片拖到这里\n从一张图片，开始你的创作'),fill=MUTED,font=('Microsoft YaHei UI',12),justify='center',width=max(50,w-40))
+            canvas.create_text(w/2,h/2+22,text=getattr(self,'empty_message','拖入文件或点击添加'),fill=MUTED,font=('Microsoft YaHei UI',12),justify='center',width=max(50,w-40))
             self.preview_photo=None;self.zoom_text.set('适应窗口');return
         im=self.preview_image;fit=min(max(1,w-50)/im.width,max(1,h-50)/im.height)
         self.display_scale=fit if self.zoom is None else self.zoom

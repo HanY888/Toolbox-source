@@ -27,7 +27,7 @@ for candidate in (Path(__import__('sys').base_prefix)/'tcl').rglob('license.term
     target=licenses/'tcl-tk'/candidate.parent.name/'license.terms';target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(candidate,target)
 python_license=Path(__import__('sys').base_prefix)/'LICENSE.txt'
 if python_license.exists():shutil.copy2(python_license,licenses/'Python-LICENSE.txt')
-shutil.copy2(root/'dist/ShiguangToolbox.exe',release/'ShiguangToolbox.exe')
+shutil.copy2(root/'dist/Toolbox.exe',release/'Toolbox.exe')
 shutil.copy2(root/'README.md',release/'使用说明.md')
 shutil.copy2(root/'LICENSE',release/'LICENSE')
 source=release/'github-source';source.mkdir(exist_ok=True)
@@ -42,11 +42,11 @@ for p in source.rglob('*'):
         content=p.read_text(encoding='utf-8',errors='ignore')
         if str(root) in content:
             raise RuntimeError(f'Local path found: {p.relative_to(source)}')
-with zipfile.ZipFile(release/'ShiguangToolbox-source.zip','w',zipfile.ZIP_DEFLATED) as z:
+with zipfile.ZipFile(release/'Toolbox-source.zip','w',zipfile.ZIP_DEFLATED) as z:
     for p in sorted(source.rglob('*')):
         if p.is_file():z.write(p,p.relative_to(source))
-with zipfile.ZipFile(release/f'ShiguangToolbox-Portable-{VERSION}-x64.zip','w',zipfile.ZIP_DEFLATED) as z:
-    for name in ['ShiguangToolbox.exe','使用说明.md','LICENSE','ShiguangToolbox-source.zip']:z.write(release/name,name)
+with zipfile.ZipFile(release/f'Toolbox-Portable-{VERSION}-x64.zip','w',zipfile.ZIP_DEFLATED) as z:
+    for name in ['Toolbox.exe','使用说明.md','LICENSE','Toolbox-source.zip']:z.write(release/name,name)
     for p in licenses.rglob('*'):
         if p.is_file():z.write(p,p.relative_to(release))
 checksums();print(f'Release prepared: {release}')

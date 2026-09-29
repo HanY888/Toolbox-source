@@ -7,7 +7,7 @@ EXTENSIONS=('.jpg','.jpeg','.png','.webp','.bmp','.tif','.tiff','.pdf')
 VERB='ShiguangToolbox'
 RELATIVE=rf'*\shell\{VERB}'
 KEY=rf'Software\Classes\{RELATIVE}'
-LABEL='使用拾光工具箱打开'
+LABEL='使用 Toolbox 打开'
 APPLIES_TO=' OR '.join(f'System.FileExtension:="{ext}"' for ext in EXTENSIONS)
 
 def command_for(exe):

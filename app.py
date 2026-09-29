@@ -19,7 +19,7 @@ class App(StudioUI, TkinterDnD.Tk):
     def __init__(self, broker=None, tray=False):
         super().__init__()
         self.broker=broker;self.tray_icon=None;self.tray_ready=False;self.pending_paths=[];self.exiting=False
-        self.title(f'拾光工具箱 Studio {VERSION} · 图片 & PDF')
+        self.title(f'Toolbox {VERSION}')
         self.configure(bg='#edf2f7')
         if (BASE / 'assets/app.ico').exists(): self.iconbitmap(str(BASE / 'assets/app.ico'))
         self.files = []; self.busy = False; self.events = queue.Queue(); self.cancel = threading.Event(); self.last_out = None
@@ -44,6 +44,9 @@ class App(StudioUI, TkinterDnD.Tk):
             p=Path(item).resolve()
             if p.is_file() and p.suffix.lower() in IMAGE_EXTS|{'.pdf'} and p not in self.files:self.files.append(p)
         self.refresh()
+        if OPS[self.op.get()]=='pdf_edit' and self.pdf_editor.model is None:
+            pdfs=[p for p in self.files if p.suffix.lower()=='.pdf']
+            if pdfs:self.pdf_editor.open(pdfs[0])
     def add_dialog(self):self.add(filedialog.askopenfilenames(filetypes=[('图片和 PDF','*.jpg *.jpeg *.png *.webp *.bmp *.tif *.tiff *.pdf')]))
     def clear(self):
         if not self.busy:self.files.clear();self.refresh()
@@ -69,7 +72,9 @@ class App(StudioUI, TkinterDnD.Tk):
         messagebox.showinfo('打印','先使用“图片转 PDF / 多图打印”生成文件，再打开打印。')
     def start(self):
         if self.busy:return
-        op=OPS[self.op.get()]; want_pdf=op.startswith('pdf_')
+        op=OPS[self.op.get()]
+        if op=='pdf_edit':self.pdf_editor.save();return
+        want_pdf=op.startswith('pdf_')
         files=[p for p in self.files if (p.suffix.lower()=='.pdf')==want_pdf]
         if not files:messagebox.showinfo('添加文件','请添加适用于当前功能的文件。');return
         try:
@@ -102,7 +107,7 @@ class App(StudioUI, TkinterDnD.Tk):
                     if '--background' in sys.argv:self.withdraw()
                     continue
                 if event[0]=='tray_error':self.show_window();self.status.set('托盘启动失败，窗口保持打开。');continue
-                if event[0] in ('preview','preview_error'):
+                if event[0] in ('preview','preview_error','pdf_preview'):
                     self.accept_preview(event);continue
                 if event[0]=='progress':self.progress['value']=event[1]*100/max(1,event[2]);self.status.set(f'{event[1]}/{event[2]} · {event[3]}')
                 else:
@@ -122,8 +127,8 @@ class App(StudioUI, TkinterDnD.Tk):
         win=tk.Toplevel(self);win.title('右键菜单 · 检测与修复');win.geometry('620x530');win.minsize(620,530)
         frame=ttk.Frame(win,padding=22);frame.pack(fill='both',expand=True)
         ttk.Label(frame,text='文件右键入口',font=('Microsoft YaHei UI',16,'bold')).pack(anchor='w')
-        ttk.Label(frame,text='Windows 11：右键图片或 PDF → 显示更多选项 → 使用拾光工具箱打开\n也可选中文件后按 Shift + F10。请不要右键文件夹或空白处。',wraplength=565).pack(anchor='w',pady=(12,8))
-        ttk.Label(frame,text='多选文件也可通过“发送到 → 拾光工具箱”一次导入。\n只修改当前用户的菜单，不改变文件默认打开方式。',wraplength=565,foreground='#6c7f90').pack(anchor='w',pady=(0,14))
+        ttk.Label(frame,text='Windows 11：右键图片或 PDF → 显示更多选项 → 使用 Toolbox 打开\n也可选中文件后按 Shift + F10。请不要右键文件夹或空白处。',wraplength=565).pack(anchor='w',pady=(12,8))
+        ttk.Label(frame,text='多选文件也可通过“发送到 → Toolbox”一次导入。\n只修改当前用户的菜单，不改变文件默认打开方式。',wraplength=565,foreground='#6c7f90').pack(anchor='w',pady=(0,14))
         status=tk.StringVar()
         ttk.Label(frame,textvariable=status,wraplength=565,foreground='#138b80').pack(anchor='w',pady=8)
         ttk.Label(frame,text='当前程序位置',foreground='#6c7f90').pack(anchor='w',pady=(8,4))
@@ -155,7 +160,7 @@ class App(StudioUI, TkinterDnD.Tk):
             import pystray
             from PIL import Image
             icon_image=Image.open(BASE/'assets/app.ico').copy()
-            self.tray_icon=pystray.Icon('ShiguangToolbox',icon_image,'拾光工具箱',menu=pystray.Menu(
+            self.tray_icon=pystray.Icon('ShiguangToolbox',icon_image,'Toolbox',menu=pystray.Menu(
                 pystray.MenuItem('打开工具箱',lambda:self.events.put(('tray_show',)),default=True),
                 pystray.MenuItem('退出',lambda:self.events.put(('tray_exit',)))))
             def ready(icon):
@@ -170,7 +175,9 @@ class App(StudioUI, TkinterDnD.Tk):
     def poll_instance(self):
         if self.exiting:return
         for message in self.broker.drain():
-            if message['action']=='quit':self.request_exit()
+            if message['action']=='quit_target':
+                if message.get('target')==str(Path(sys.executable).resolve()):self.request_exit()
+            elif message['action']=='quit':self.request_exit()
             else:self.add(message['paths']);self.show_window()
             if self.exiting:return
         if not self.exiting:self.after(200,self.poll_instance)
@@ -180,6 +187,7 @@ class App(StudioUI, TkinterDnD.Tk):
             return
         self.request_exit()
     def request_exit(self):
+        if not self.pdf_editor.confirm_discard():return
         if self.busy:
             if messagebox.askyesno('任务进行中','取消任务并在处理停止后关闭？'):
                 self.cancel.set();self.wait_close()
@@ -192,6 +200,7 @@ class App(StudioUI, TkinterDnD.Tk):
         self.exiting=True
         if self.tray_icon:
             self.tray_icon.stop();self.tray_icon=None
+        if self.pdf_editor.model:self.pdf_editor.model.close();self.pdf_editor.model=None
         super().destroy()
         if self.broker:self.broker.close();self.broker=None
 
@@ -206,7 +215,7 @@ if __name__=='__main__':
         from toolbox.desktop import InstanceBroker
         broker=InstanceBroker()
         if '--quit' in sys.argv:
-            if not broker.primary:broker.send(action='quit')
+            if not broker.primary:broker.send(action='quit_target',target=sys.executable)
             broker.close()
         elif not broker.primary:
             broker.send([a for a in sys.argv[1:] if not a.startswith('--')]);broker.close()

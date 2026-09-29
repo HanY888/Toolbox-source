@@ -15,7 +15,7 @@ OPS = {
     '多图拼接': 'stitch', '图片转 PDF / 多图打印': 'images_pdf',
     'PDF 压缩': 'pdf_compress', 'PDF 转图片': 'pdf_images',
     'PDF 合并': 'pdf_merge', 'PDF 拆分': 'pdf_split',
-    'PDF 提取页面': 'pdf_extract', 'PDF 删除页面': 'pdf_delete', 'PDF 页面旋转': 'pdf_rotate',
+    'PDF 提取页面': 'pdf_extract', 'PDF 删除页面': 'pdf_delete', 'PDF 页面旋转': 'pdf_rotate', 'PDF 编辑': 'pdf_edit',
 }
 
 class Cancelled(Exception):
@@ -82,6 +82,12 @@ def save_pdf(doc, path):
     doc.save(path, garbage=4, deflate=True)
 
 def run(files, op, out, opts, progress, cancel):
+    from .pdf_document import PDF_LOCK
+    if op.startswith('pdf_') or op=='images_pdf':
+        with PDF_LOCK:return _run(files,op,out,opts,progress,cancel)
+    return _run(files,op,out,opts,progress,cancel)
+
+def _run(files, op, out, opts, progress, cancel):
     out = Path(out); out.mkdir(parents=True, exist_ok=True)
     outputs, failures = [], []
     def check():

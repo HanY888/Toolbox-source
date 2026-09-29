@@ -1,4 +1,4 @@
-; Shiguang Toolbox installer messages, AGPL-3.0-or-later.
+; Toolbox installer messages, AGPL-3.0-or-later.
 [LangOptions]
 LanguageName=简体中文
 LanguageID=$0804
@@ -27,7 +27,7 @@ SelectLanguageTitle=安装语言
 SelectLanguageLabel=请选择安装向导使用的语言。
 ClickNext=点击“下一步”继续，或点击“取消”退出。
 WelcomeLabel1=欢迎安装 [name]
-WelcomeLabel2=即将在本机安装 [name/ver]。%n%n文件处理完全在本地完成，无需账号或网络。
+WelcomeLabel2=即将安装 [name/ver]。
 WizardLicense=软件许可
 LicenseLabel=继续前请阅读以下许可。
 LicenseLabel3=请阅读软件许可；接受许可后可继续安装。
