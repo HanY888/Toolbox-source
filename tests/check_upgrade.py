@@ -44,13 +44,15 @@ atexit.register(restore_user)
 installed=False
 try:
     old=root/'release/v0.3.0/ShiguangToolbox-Setup-0.3.0-x64.exe'
-    new=root/'release/v0.4.0/Toolbox-Setup-0.4.0-x64.exe'
+    new=root/'release/v0.5.0/Toolbox-Setup-0.5.0-x64.exe'
     args=['/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/LANG=chinesesimp','/TASKS=desktopicon,contextmenu,autostart']
     subprocess.run([str(old),*args,f'/DIR={target}'],check=True,timeout=90);installed=True
     assert read_values(winreg.HKEY_CURRENT_USER,uninstall)['DisplayName']=='拾光工具箱'
+    intermediate=root/'release/v0.4.0/Toolbox-Setup-0.4.0-x64.exe'
+    if intermediate.exists():subprocess.run([str(intermediate),*args],check=True,timeout=90)
     subprocess.run([str(new),*args],check=True,timeout=90)
     registration=read_values(winreg.HKEY_CURRENT_USER,uninstall)
-    assert registration['DisplayName']=='Toolbox' and registration['DisplayVersion']=='0.4.0'
+    assert registration['DisplayName']=='Toolbox' and registration['DisplayVersion']=='0.5.0'
     assert Path(registration['InstallLocation']).resolve()==target.resolve()
     assert (target/'Toolbox.exe').is_file() and not (target/'ShiguangToolbox.exe').exists()
     assert read_values(winreg.HKEY_CURRENT_USER,KEY)['MUIVerb']=='使用 Toolbox 打开'

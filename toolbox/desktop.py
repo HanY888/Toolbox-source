@@ -10,7 +10,7 @@ import time
 import uuid
 import winreg
 
-VERSION='0.4.0'
+VERSION='0.5.0'
 RUN_KEY=r'Software\Microsoft\Windows\CurrentVersion\Run'
 RUN_NAME='Toolbox'
 

@@ -1,6 +1,6 @@
-#define AppVersion "0.4.0"
+#define AppVersion "0.5.0"
 #ifndef Payload
-  #define Payload "..\release\v0.4.0"
+  #define Payload "..\release\v0.5.0"
 #endif
 
 [Setup]
@@ -16,8 +16,8 @@ PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
-OutputDir=..\release\v0.4.0
-OutputBaseFilename=Toolbox-Setup-0.4.0-x64
+OutputDir=..\release\v0.5.0
+OutputBaseFilename=Toolbox-Setup-0.5.0-x64
 SetupIconFile=..\assets\app.ico
 UninstallDisplayIcon={app}\Toolbox.exe
 UninstallDisplayName=Toolbox
@@ -28,7 +28,7 @@ WizardStyle=modern
 CloseApplications=yes
 RestartApplications=no
 ChangesAssociations=yes
-VersionInfoVersion=0.4.0.0
+VersionInfoVersion=0.5.0.0
 VersionInfoDescription=Toolbox安装程序
 
 [Languages]

@@ -40,12 +40,17 @@ class App(StudioUI, TkinterDnD.Tk):
     def add(self, paths):
         if self.busy:
             self.pending_paths.extend(paths);self.status.set(f'任务进行中，新导入的 {len(self.pending_paths)} 个文件将在结束后加入。');return
+        added=[]
         for item in paths:
             p=Path(item).resolve()
-            if p.is_file() and p.suffix.lower() in IMAGE_EXTS|{'.pdf'} and p not in self.files:self.files.append(p)
+            if p.is_file() and p.suffix.lower() in IMAGE_EXTS|{'.pdf'} and p not in self.files:self.files.append(p);added.append(p)
+        if added:
+            self.home.place_forget()
+            if all(p.suffix.lower()=='.pdf' for p in added) and not OPS[self.op.get()].startswith('pdf_'):self.select_tool('PDF 编辑')
+            elif all(p.suffix.lower() in IMAGE_EXTS for p in added) and OPS[self.op.get()].startswith('pdf_'):self.select_tool('多图拼接')
         self.refresh()
-        if OPS[self.op.get()]=='pdf_edit' and self.pdf_editor.model is None:
-            pdfs=[p for p in self.files if p.suffix.lower()=='.pdf']
+        if OPS[self.op.get()]=='pdf_edit':
+            pdfs=[p for p in added if p.suffix.lower()=='.pdf']
             if pdfs:self.pdf_editor.open(pdfs[0])
     def add_dialog(self):self.add(filedialog.askopenfilenames(filetypes=[('图片和 PDF','*.jpg *.jpeg *.png *.webp *.bmp *.tif *.tiff *.pdf')]))
     def clear(self):
@@ -82,7 +87,7 @@ class App(StudioUI, TkinterDnD.Tk):
             if not self.output.get().strip():raise ValueError('请选择输出目录')
             out=Path(self.output.get())/datetime.now().strftime('%Y%m%d_%H%M%S_%f'); out.mkdir(parents=True,exist_ok=False)
         except Exception as e:messagebox.showerror('设置有误',str(e));return
-        self.last_out=out;self.busy=True;self.cancel.clear();self.start_button.configure(state='disabled');self.progress['value']=0
+        self.progress.pack(fill='x',pady=(8,4));self.last_out=out;self.busy=True;self.cancel.clear();self.start_button.configure(state='disabled');self.progress['value']=0
         self.status.set(f'正在处理 {len(files)} 个文件；忽略不适用文件 {len(self.files)-len(files)} 个')
         def work():
             try:
@@ -111,7 +116,7 @@ class App(StudioUI, TkinterDnD.Tk):
                     self.accept_preview(event);continue
                 if event[0]=='progress':self.progress['value']=event[1]*100/max(1,event[2]);self.status.set(f'{event[1]}/{event[2]} · {event[3]}')
                 else:
-                    self.busy=False;self.start_button.configure(state='normal')
+                    self.busy=False;self.progress.pack_forget();self.start_button.configure(state='normal')
                     if event[0]=='done':
                         self.progress['value']=100;self.status.set(f'完成：生成 {event[1]} 个文件，失败 {len(event[2])} 个')
                         if event[2]:messagebox.showwarning('部分文件未完成','\n'.join(event[2][:8])+'\n完整记录见输出目录中的处理报告。')

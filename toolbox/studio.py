@@ -7,7 +7,7 @@ from PIL import Image, ImageTk, ImageColor
 from .engine import OPS, IMAGE_EXTS
 from .imaging import render_collage, render_single
 
-BG='#f1f5f8'; INK='#18314c'; MUTED='#6c7f90'; TEAL='#138b80'; NAV='#132d46'
+BG='#f5f6f8'; INK='#20242c'; MUTED='#667085'; TEAL='#2563eb'; NAV='#ffffff'
 
 FIELDS={
     'compress':['quality','target_kb'], 'convert':['format','quality','dpi'],
@@ -64,32 +64,34 @@ class StudioUI:
         style=ttk.Style(self);style.theme_use('clam')
         style.configure('.',font=('Microsoft YaHei UI',10),foreground=INK)
         style.configure('TFrame',background='white');style.configure('TLabel',background='white')
-        style.configure('TButton',padding=(10,6),background='#edf3f6',borderwidth=0)
-        style.map('TButton',background=[('active','#dcebe9')])
+        style.configure('TButton',padding=(10,6),background='#f1f3f6',borderwidth=0)
+        style.map('TButton',background=[('active','#e8eefc')])
         style.configure('TEntry',fieldbackground='#f6f8fa',padding=7,bordercolor='#e3eaf0',lightcolor='#e3eaf0',darkcolor='#e3eaf0')
-        style.configure('TCombobox',padding=6,fieldbackground='#f6f8fa',background='#edf3f6')
+        style.configure('TCombobox',padding=6,fieldbackground='#f6f8fa',background='#f1f3f6')
         style.map('TCombobox',fieldbackground=[('readonly','#f6f8fa')])
-        style.configure('TCheckbutton',background='white')
+        style.configure('TCheckbutton',background='white');style.configure('TRadiobutton',background='white')
+        style.configure('Accent.TButton',background=TEAL,foreground='white');style.map('Accent.TButton',background=[('active','#1d4ed8')])
+        style.configure('TScrollbar',background='#d0d5dd',troughcolor='#f5f6f8',borderwidth=0,arrowsize=12)
         style.configure('Treeview',rowheight=31,background='white',fieldbackground='white',borderwidth=0)
         style.configure('Treeview.Heading',background='#f3f7f9',padding=7,borderwidth=0)
-        style.map('Treeview',background=[('selected','#d4eee9')],foreground=[('selected',INK)])
+        style.map('Treeview',background=[('selected','#e8efff')],foreground=[('selected',INK)])
         style.configure('Horizontal.TProgressbar',background=TEAL,troughcolor='#e9f0f3',borderwidth=0)
-        self.op=tk.StringVar(value='多图拼接')
-        sidebar=tk.Frame(self,bg=NAV,width=192);sidebar.pack(side='left',fill='y');sidebar.pack_propagate(False)
-        tk.Label(sidebar,text='Toolbox',bg=NAV,fg='white',font=('Microsoft YaHei UI',16,'bold')).pack(anchor='w',padx=18,pady=(25,4))
-        tk.Label(sidebar,text='图片 / PDF',bg=NAV,fg='#8ea8bc',font=('Microsoft YaHei UI',9)).pack(anchor='w',padx=18,pady=(0,20))
-        self.nav_buttons={}
-        for i,(title,op) in enumerate(OPS.items()):
-            if i in (0,9):tk.Label(sidebar,text='图片工具' if i==0 else 'PDF 工具',bg=NAV,fg='#7c98ae',font=('Microsoft YaHei UI',9)).pack(anchor='w',padx=20,pady=(6,5))
-            btn=RoundButton(sidebar,SHORT[i],lambda title=title:self.select_tool(title),width=170,height=28,fill=NAV,fg='#d4e0e9',bg=NAV)
-            btn.pack(fill='x',padx=10,pady=1);self.nav_buttons[title]=btn
+        self.op=tk.StringVar(value='多图拼接');self.active_title='多图拼接'
+        sidebar=tk.Frame(self,bg=NAV,width=156);sidebar.pack(side='left',fill='y');sidebar.pack_propagate(False)
+        tk.Label(sidebar,text='Toolbox',bg=NAV,fg=INK,font=('Microsoft YaHei UI',16,'bold')).pack(anchor='w',padx=18,pady=(25,4))
+        tk.Label(sidebar,text='文件工作台',bg=NAV,fg=MUTED,font=('Microsoft YaHei UI',9)).pack(anchor='w',padx=18,pady=(0,20))
+        self.nav_buttons={};self.category_buttons={}
+        for label in ('首页','PDF','图片','批处理'):
+            button=RoundButton(sidebar,label,lambda name=label:self.show_category(name),width=132,height=40,fill=NAV,fg=MUTED,bg=NAV)
+            button.pack(fill='x',padx=12,pady=4);self.category_buttons[label]=button
         ttk.Button(sidebar,text='应用与右键设置',command=self.menu_settings).pack(side='bottom',fill='x',padx=14,pady=4)
 
-        shell=tk.Frame(self,bg=BG);shell.pack(side='left',fill='both',expand=True,padx=20,pady=18)
+        shell=tk.Frame(self,bg=BG);shell.pack(side='left',fill='both',expand=True,padx=18,pady=18)
         header=tk.Frame(shell,bg=BG);header.pack(fill='x',pady=(0,16))
         self.heading=tk.Label(header,text='多图拼接',bg=BG,fg=INK,font=('Microsoft YaHei UI',22,'bold'));self.heading.pack(side='left')
-        RoundButton(header,'＋ 添加文件',self.add_dialog,width=126,bg=BG).pack(side='right')
-        body=tk.Frame(shell,bg=BG);body.pack(fill='both',expand=True)
+        self.add_button=RoundButton(header,'打开文件',self.open_current,width=112,bg=BG);self.add_button.pack(side='right')
+        self.tool_picker=ttk.Combobox(header,textvariable=self.op,values=list(OPS),state='readonly',width=21);self.tool_picker.pack(side='right',padx=12);self.tool_picker.bind('<<ComboboxSelected>>',lambda e:self.select_tool(self.op.get()))
+        body=tk.Frame(shell,bg=BG);body.pack(fill='both',expand=True);self.work_body=body
         right=tk.Frame(body,bg='white',width=286,highlightbackground='#e3eaf0',highlightthickness=1);right.pack(side='right',fill='y',padx=(16,0));right.pack_propagate(False)
         center=tk.Frame(body,bg=BG);center.pack(side='left',fill='both',expand=True)
         from .pdf_editor import PDFEditor
@@ -105,13 +107,14 @@ class StudioUI:
         ttk.Label(bar,textvariable=self.zoom_text,width=9,anchor='center').pack(side='right')
         ttk.Button(bar,text='－',width=3,command=lambda:self.change_zoom(.8)).pack(side='right',padx=3)
         self.pdf_page=0;self.pdf_total=0;self.pdf_preview_path=None
+        self.compare_button=ttk.Button(bar,text='压缩对比',command=self.open_comparison)
         self.pdf_nav=ttk.Frame(card);self.pdf_page_text=tk.StringVar(value='')
         ttk.Button(self.pdf_nav,text='上一页',command=lambda:self.turn_pdf(-1)).pack(side='left',padx=4)
         ttk.Label(self.pdf_nav,textvariable=self.pdf_page_text).pack(side='left',padx=10)
         ttk.Button(self.pdf_nav,text='下一页',command=lambda:self.turn_pdf(1)).pack(side='left',padx=4)
         ttk.Button(self.pdf_nav,text='编辑此 PDF',command=self.edit_preview_pdf).pack(side='right',padx=4)
-        area=tk.Frame(card,bg='#e8eef2');area.pack(fill='both',expand=True,padx=12)
-        self.preview_canvas=tk.Canvas(area,bg='#e8eef2',highlightthickness=0,cursor='fleur')
+        area=tk.Frame(card,bg='#e9ebef');area.pack(fill='both',expand=True,padx=12)
+        self.preview_canvas=tk.Canvas(area,bg='#e9ebef',highlightthickness=0,cursor='fleur')
         self.preview_canvas.grid(row=0,column=0,sticky='nsew');area.rowconfigure(0,weight=1);area.columnconfigure(0,weight=1)
         vs=ttk.Scrollbar(area,orient='vertical',command=self.preview_canvas.yview);vs.grid(row=0,column=1,sticky='ns')
         hs=ttk.Scrollbar(area,orient='horizontal',command=self.preview_canvas.xview);hs.grid(row=1,column=0,sticky='ew')
@@ -138,15 +141,16 @@ class StudioUI:
         self.tree.bind('<<TreeviewSelect>>',lambda e:self.schedule_preview())
         self.tree.drop_target_register('DND_Files');self.tree.dnd_bind('<<Drop>>',lambda e:self.add(self.tk.splitlist(e.data)))
 
-        ttk.Label(right,text='调整与导出',font=('Microsoft YaHei UI',13,'bold')).pack(anchor='w',padx=18,pady=(18,12))
+        self.right_title=ttk.Label(right,text='调整与导出',font=('Microsoft YaHei UI',12,'bold'));self.right_title.pack(anchor='w',padx=18,pady=(18,12))
         # Export controls remain visible even when parameters need scrolling.
         export=tk.Frame(right,bg='white');export.pack(side='bottom',fill='x',padx=14,pady=14)
         self.hint=ttk.Label(export,text='',foreground=MUTED,wraplength=245,font=('Microsoft YaHei UI',9));self.hint.pack(anchor='w',pady=(0,12))
         ttk.Separator(export).pack(fill='x',pady=(0,12))
-        ttk.Label(export,text='输出到',foreground=MUTED).pack(anchor='w')
+        self.output_controls=ttk.Frame(export);self.output_controls.pack(fill='x')
+        ttk.Label(self.output_controls,text='输出到',foreground=MUTED).pack(anchor='w')
         self.output=tk.StringVar(value=str(Path.home()/'Documents'/'Toolbox输出'))
-        ttk.Entry(export,textvariable=self.output).pack(fill='x',pady=6)
-        output_row=ttk.Frame(export);output_row.pack(fill='x')
+        ttk.Entry(self.output_controls,textvariable=self.output).pack(fill='x',pady=6)
+        output_row=ttk.Frame(self.output_controls);output_row.pack(fill='x')
         ttk.Button(output_row,text='选择目录',command=self.choose_output).pack(side='left')
         ttk.Button(output_row,text='打开结果',command=self.open_output).pack(side='right')
         self.start_button=RoundButton(export,'导出',self.start,height=42);self.start_button.pack(fill='x',pady=(12,6))
@@ -176,19 +180,33 @@ class StudioUI:
         self.ratio_widget=ttk.Checkbutton(self.params,text='保持宽高比例',variable=self.keep_ratio)
         self.pdf_settings=self.pdf_editor.build_controls(self.params)
         self.status=tk.StringVar(value='准备就绪')
-        self.progress=ttk.Progressbar(shell,mode='determinate');self.progress.pack(fill='x',pady=(14,6))
+        self.progress=ttk.Progressbar(shell,mode='determinate');self.progress.pack(fill='x',pady=(14,6));self.progress.pack_forget()
         tk.Label(shell,textvariable=self.status,bg=BG,fg=MUTED,anchor='w',font=('Microsoft YaHei UI',9)).pack(fill='x')
         threading.Thread(target=self.preview_loop,daemon=True).start()
         self.bind('<Destroy>',lambda e:self.preview_stop.set() if e.widget is self else None)
         self.update_fields()
+        self.build_home(shell)
+        self.show_category('首页')
 
     def select_tool(self,title):
-        if self.busy:return
+        if self.busy:self.op.set(self.active_title);return
+        self.active_title=title
+        if title not in self.tool_picker['values']:self.tool_picker.configure(values=[name for name,code in OPS.items() if code.startswith('pdf_')==OPS[title].startswith('pdf_')])
+        if hasattr(self,'home'):self.home.place_forget()
+        if not self.tool_picker.winfo_manager():self.tool_picker.pack(side='right',padx=12)
         self.op.set(title);self.update_fields()
     def scroll_params(self,event):
         self.param_canvas.yview_scroll(-1 if event.delta>0 else 1,'units');return 'break'
     def update_fields(self,*_):
         op=OPS[self.op.get()];self.heading.configure(text=self.op.get())
+        category='PDF' if op.startswith('pdf_') else '图片'
+        for label,button in self.category_buttons.items():
+            button.fill='#e8efff' if label==category else NAV;button.fg=TEAL if label==category else MUTED;button.draw()
+        self.right_title.configure(text='内容属性' if op=='pdf_edit' else '调整与导出')
+        self.add_button.configure(text='打开 PDF' if op=='pdf_edit' else '添加文件')
+        if op=='pdf_edit':self.output_controls.pack_forget()
+        elif not self.output_controls.winfo_manager():self.output_controls.pack(fill='x',before=self.start_button)
+
         if op=='pdf_edit':
             self.preview_card.pack_forget();self.files_card.pack_forget();self.pdf_editor.pack(fill='both',expand=True)
             if self.pdf_editor.model is None:
@@ -198,6 +216,8 @@ class StudioUI:
             self.pdf_editor.pack_forget()
             self.preview_card.pack(fill='both',expand=True);self.files_card.pack(fill='x',pady=(14,0))
         self.start_button.configure(text='另存 PDF' if op=='pdf_edit' else '导出')
+        self.compare_button.pack_forget()
+        if op in ('compress','pdf_compress'):self.compare_button.pack(side='left',padx=14)
         self.pdf_nav.pack_forget()
         if op.startswith('pdf_') and op!='pdf_edit':self.pdf_nav.pack(fill='x',before=self.preview_canvas.master,padx=12,pady=(0,6))
         for title,btn in self.nav_buttons.items():
@@ -356,3 +376,57 @@ class StudioUI:
         else:self.preview_photo=ImageTk.PhotoImage(image)
         canvas.create_image(x,y,image=self.preview_photo,anchor='nw')
         self.zoom_text.set('适应窗口' if self.zoom is None else f'{round(self.display_scale*100)}%')
+
+    def open_current(self):
+        if self.busy:return
+        if self.home.winfo_ismapped():self.add_dialog();return
+        if OPS[self.op.get()]=='pdf_edit':self.pdf_editor.open_dialog()
+        else:self.add_dialog()
+    def show_category(self,name):
+        if self.busy:return
+        if name=='首页':
+            for label,button in self.category_buttons.items():
+                button.fill='#e8efff' if label==name else NAV;button.fg=TEAL if label==name else MUTED;button.draw()
+            self.tool_picker.pack_forget()
+            self.home.place(in_=self.work_body,x=0,y=0,relwidth=1,relheight=1);self.home.lift();self.heading.configure(text='工作台');self.add_button.configure(text='打开文件');return
+        self.home.place_forget()
+        titles=[title for title,code in OPS.items() if (code.startswith('pdf_') if name=='PDF' else not code.startswith('pdf_'))]
+        if name=='批处理':titles=[title for title,code in OPS.items() if code!='pdf_edit']
+        self.tool_picker.configure(values=titles)
+        self.select_tool('PDF 编辑' if name=='PDF' else '多图拼接' if name=='图片' else '图片压缩 / 指定大小')
+        for label,button in self.category_buttons.items():
+            button.fill='#e8efff' if label==name else NAV;button.fg=TEAL if label==name else MUTED;button.draw()
+    def build_home(self,shell):
+        self.home=tk.Frame(shell,bg=BG)
+        tk.Label(self.home,text='开始处理文件',bg=BG,fg=INK,font=('Microsoft YaHei UI',24,'bold')).pack(anchor='w',pady=(32,8),padx=24)
+        tk.Label(self.home,text='选择工具，或打开 PDF 进入编辑工作区',bg=BG,fg=MUTED,font=('Microsoft YaHei UI',11)).pack(anchor='w',padx=24,pady=(0,24))
+        cards=tk.Frame(self.home,bg=BG);cards.pack(fill='x',padx=16)
+        for i,(label,detail,title) in enumerate([('编辑 PDF','修改文字、图片与页面','PDF 编辑'),('压缩 PDF','预览压缩效果与文件大小','PDF 压缩'),('多图拼接','实时预览布局与间距','多图拼接'),('图片压缩','控制清晰度与目标大小','图片压缩 / 指定大小'),('合并 PDF','整理多个文档','PDF 合并'),('转换图片','调整格式、尺寸与 DPI','图片格式转换')]):
+            card=tk.Frame(cards,bg='white',highlightbackground='#e4e7ec',highlightthickness=1);card.grid(row=i//3,column=i%3,sticky='nsew',padx=8,pady=8,ipady=16);cards.columnconfigure(i%3,weight=1)
+            icon=tk.Canvas(card,width=42,height=42,bg='white',highlightthickness=0);icon.pack(anchor='w',padx=20,pady=(0,12))
+            icon.create_rectangle(2,2,40,40,fill='#e8efff',outline='')
+            if i in (0,1,4):
+                icon.create_rectangle(13,9,29,32,outline=TEAL,width=2)
+                for yy in (16,21,26):icon.create_line(17,yy,25,yy,fill=TEAL,width=2)
+            else:
+                icon.create_rectangle(9,11,33,31,outline=TEAL,width=2);icon.create_line(10,29,19,19,25,25,29,21,33,26,fill=TEAL,width=2)
+            title_widget=tk.Label(card,text=label,bg='white',fg=INK,font=('Microsoft YaHei UI',13,'bold'),anchor='w');title_widget.pack(fill='x',padx=20)
+            detail_widget=tk.Label(card,text=detail,bg='white',fg=MUTED,font=('Microsoft YaHei UI',10),anchor='w');detail_widget.pack(fill='x',padx=20,pady=(8,0))
+            for widget in (card,icon,title_widget,detail_widget):widget.configure(cursor='hand2');widget.bind('<Button-1>',lambda e,t=title:self.select_tool(t))
+        drop=tk.Canvas(self.home,bg=BG,height=115,highlightthickness=0);drop.pack(fill='x',padx=24,pady=28)
+        def draw_drop(e):
+            drop.delete('all');drop.create_rectangle(1,1,e.width-2,110,outline='#c7ced8',dash=(5,4));drop.create_text(e.width/2,45,text='拖入图片或 PDF，开始处理',fill=INK,font=('Microsoft YaHei UI',12));drop.create_text(e.width/2,78,text='也可以点击右上角打开文件',fill=MUTED,font=('Microsoft YaHei UI',10))
+        drop.bind('<Configure>',draw_drop);drop.drop_target_register('DND_Files');drop.dnd_bind('<<Drop>>',lambda e:self.add(self.tk.splitlist(e.data)))
+    def open_comparison(self):
+        if self.busy:return
+        from .comparison import CompressionComparison
+        op=OPS[self.op.get()];files=[p for p in self.files if (p.suffix.lower()=='.pdf')==(op=='pdf_compress')]
+        if not files:
+            from tkinter import messagebox
+            messagebox.showinfo('压缩对比','请先添加文件');return
+        selected=self.tree.selection();path=self.files[int(selected[0])] if selected else files[0]
+        if path not in files:path=files[0]
+        try:CompressionComparison(self,path,op,self.read_options())
+        except Exception as e:
+            from tkinter import messagebox
+            messagebox.showerror('无法对比',str(e))

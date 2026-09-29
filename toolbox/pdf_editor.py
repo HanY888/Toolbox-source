@@ -3,15 +3,26 @@ from tkinter import ttk,filedialog,messagebox
 from pathlib import Path
 from PIL import ImageTk
 from .pdf_document import PDFDocument
+from .pdf_workspace import WorkspaceTools, TOOLS
 
-class PDFEditor(ttk.Frame):
+class PDFEditor(WorkspaceTools,ttk.Frame):
     def __init__(self,parent,app):
-        super().__init__(parent);self.app=app;self.model=None;self.index=0;self.photos={};self.tool='hand';self.drag=None;self.zoom=None;self.render_job=None
+        super().__init__(parent);self.app=app;self.model=None;self.index=0;self.photos={};self.tool='select';self.drag=None;self.zoom=None;self.render_job=None
         self.caption=tk.StringVar(value='打开 PDF')
         ttk.Label(self,textvariable=self.caption,font=('Microsoft YaHei UI',11,'bold')).pack(anchor='w',padx=10,pady=10)
         toolbar=ttk.Frame(self);toolbar.pack(fill='x',padx=8,pady=(0,7))
-        for label,fn in [('打开',self.open_dialog),('插入页面',self.insert_pages),('旋转',lambda:self.edit('rotate')),('删除',lambda:self.edit('delete')),('撤销',self.undo)]:ttk.Button(toolbar,text=label,command=fn).pack(side='left',padx=2)
-        self.mode=tk.StringVar(value='hand');self.font_size=tk.StringVar(value='20');self.color=tk.StringVar(value='黑色')
+        for label,fn in [('页面管理',self.organize),('插入页面',self.insert_pages),('撤销',self.undo),('重做',self.redo)]:ttk.Button(toolbar,text=label,command=fn).pack(side='left',padx=2)
+        self.mode=tk.StringVar(value='select');self.font_size=tk.StringVar(value='20');self.color=tk.StringVar(value='黑色')
+        self.tool_label=tk.StringVar(value='选择 / 编辑')
+        picker=ttk.Combobox(toolbar,textvariable=self.tool_label,values=list(TOOLS),state='readonly',width=12);picker.pack(side='left',padx=5)
+        picker.bind('<<ComboboxSelected>>',lambda e:(self.mode.set(TOOLS[self.tool_label.get()]),self.choose_tool()))
+        search=ttk.Frame(self);search.pack(fill='x',padx=10,pady=(0,8))
+        self.search_var=tk.StringVar();self.search_count=tk.StringVar()
+        self.search_entry=ttk.Entry(search,textvariable=self.search_var,width=22);self.search_entry.pack(side='left');self.search_entry.bind('<Return>',self.find_text)
+        for label,fn in [('查找',self.find_text),('‹',lambda:self.next_hit(-1)),('›',self.next_hit)]:ttk.Button(search,text=label,width=4,command=fn).pack(side='left',padx=2)
+        ttk.Label(search,textvariable=self.search_count,foreground='#667085').pack(side='left',padx=6)
+        self.app.bind('<Control-f>',self.focus_search)
+        self.app.bind('<Control-s>',lambda e:self.save() if self.winfo_ismapped() else None)
         body=ttk.Frame(self);body.pack(fill='both',expand=True)
         left=ttk.Frame(body,width=110);left.pack(side='left',fill='y');left.pack_propagate(False)
         ttk.Style(self).configure('Pages.Treeview',rowheight=118)
@@ -28,26 +39,13 @@ class PDFEditor(ttk.Frame):
         for text,fn in [('‹',lambda:self.go(-1)),('›',lambda:self.go(1)),('－',lambda:self.magnify(.8)),('＋',lambda:self.magnify(1.25)),('适应',self.fit)]:ttk.Button(nav,text=text,width=4,command=fn).pack(side='left',padx=2)
         self.page_label=tk.StringVar(value='');ttk.Label(nav,textvariable=self.page_label).pack(side='right',padx=8)
         area=ttk.Frame(pane);area.pack(fill='both',expand=True)
-        self.canvas=tk.Canvas(area,bg='#e8eef2',highlightthickness=0)
+        self.canvas=tk.Canvas(area,bg='#e9ebef',highlightthickness=0)
         self.canvas.grid(row=0,column=0,sticky='nsew');area.columnconfigure(0,weight=1);area.rowconfigure(0,weight=1)
         vs=ttk.Scrollbar(area,orient='vertical',command=self.canvas.yview);vs.grid(row=0,column=1,sticky='ns')
         hs=ttk.Scrollbar(area,orient='horizontal',command=self.canvas.xview);hs.grid(row=1,column=0,sticky='ew');self.canvas.configure(xscrollcommand=hs.set,yscrollcommand=vs.set)
-        self.canvas.bind('<Configure>',lambda e:self.schedule_render());self.canvas.bind('<MouseWheel>',lambda e:self.magnify(1.15 if e.delta>0 else 1/1.15))
+        self.canvas.bind('<Configure>',lambda e:self.schedule_render());self.canvas.bind('<MouseWheel>',lambda e:self.canvas.yview_scroll(-3 if e.delta>0 else 3,'units'));self.canvas.bind('<Control-MouseWheel>',lambda e:self.magnify(1.15 if e.delta>0 else 1/1.15))
         self.canvas.bind('<ButtonPress-1>',self.press);self.canvas.bind('<B1-Motion>',self.motion);self.canvas.bind('<ButtonRelease-1>',self.release)
         self.note=tk.StringVar(value='');ttk.Label(self,textvariable=self.note,wraplength=620,foreground='#6c7f90').pack(anchor='w',padx=8,pady=8)
-    def build_controls(self,parent):
-        panel=ttk.Frame(parent)
-        ttk.Label(panel,text='页面操作',font=('Microsoft YaHei UI',10,'bold')).pack(anchor='w',pady=(0,8))
-        for label,fn in [('上移页面',lambda:self.move_current(-1)),('下移页面',lambda:self.move_current(1))]:ttk.Button(panel,text=label,command=fn).pack(fill='x',pady=3)
-        ttk.Separator(panel).pack(fill='x',pady=14)
-        ttk.Label(panel,text='添加内容',font=('Microsoft YaHei UI',10,'bold')).pack(anchor='w',pady=(0,8))
-        for label,key in [('移动页面视图','hand'),('添加文字','text'),('添加图片','image'),('添加遮盖块','cover')]:
-            ttk.Radiobutton(panel,text=label,variable=self.mode,value=key,command=self.choose_tool).pack(anchor='w',pady=5)
-        row=ttk.Frame(panel);row.pack(fill='x',pady=12)
-        ttk.Label(row,text='字号').pack(side='left');ttk.Spinbox(row,from_=6,to=200,textvariable=self.font_size,width=5).pack(side='right')
-        row=ttk.Frame(panel);row.pack(fill='x')
-        ttk.Label(row,text='颜色').pack(side='left');ttk.Combobox(row,textvariable=self.color,values=['黑色','白色','红色','蓝色'],state='readonly',width=7).pack(side='right')
-        return panel
     def move_current(self,delta):
         if not self.model or self.app.busy:return
         target=self.index+delta
@@ -69,7 +67,7 @@ class PDFEditor(ttk.Frame):
         if self.model:self.model.close()
         self.model=new;self.index=0;self.zoom=None;self.refresh();return True
     def refresh(self):
-        self.photos.clear();self.pages.delete(*self.pages.get_children())
+        self.selected=None;self.update_properties();self.search_hits=[];self.search_count.set('');self.photos.clear();self.pages.delete(*self.pages.get_children())
         if not self.model:return
         self.index=max(0,min(self.index,len(self.model)-1))
         for i in range(len(self.model)):self.pages.insert('','end',iid=str(i),text=str(i+1))
@@ -89,7 +87,10 @@ class PDFEditor(ttk.Frame):
             if abs(i-start)>18:self.pages.item(str(i),image='');del self.photos[i]
     def page_selected(self,*_):
         selection=self.pages.selection()
-        if selection:self.index=int(selection[0]);self.schedule_render()
+        if selection:
+            new_index=int(selection[0])
+            if new_index!=self.index:self.selected=None;self.update_properties()
+            self.index=new_index;self.schedule_render()
     def drop_page(self,event):
         target=self.pages.identify_row(event.y);source=getattr(self,'drag_page','')
         if not self.model or not source or not target or source==target:return
@@ -97,7 +98,7 @@ class PDFEditor(ttk.Frame):
         try:self.model.move(int(source),int(target));self.index=int(target);self.refresh()
         except Exception as e:messagebox.showerror('排序失败',str(e),parent=self)
     def go(self,delta):
-        if self.model:self.index=max(0,min(self.index+delta,len(self.model)-1));self.pages.selection_set(str(self.index));self.pages.see(str(self.index));self.schedule_render();self.thumbnails()
+        if self.model:self.select_object(None);self.index=max(0,min(self.index+delta,len(self.model)-1));self.pages.selection_set(str(self.index));self.pages.see(str(self.index));self.schedule_render();self.thumbnails()
     def edit(self,operation):
         if not self.model or self.app.busy:return
         if operation=='delete' and not messagebox.askyesno('删除页面',f'删除第 {self.index+1} 页？',parent=self):return
@@ -112,9 +113,10 @@ class PDFEditor(ttk.Frame):
         try:self.model.insert(paths,self.index);self.index+=1;self.refresh()
         except Exception as e:messagebox.showerror('插入失败',str(e),parent=self)
     def choose_tool(self):
-        self.tool=self.mode.get();self.canvas.configure(cursor='fleur' if self.tool=='hand' else 'crosshair')
+        self.tool=self.mode.get();self.tool_label.set(next((label for label,key in TOOLS.items() if key==self.tool),'选择 / 编辑'));self.selected=None;self.update_properties();self.draw_selection();self.canvas.configure(cursor='fleur' if self.tool=='hand' else 'crosshair')
         self.note.set('拖出添加区域' if self.tool in ('text','image') else '遮盖仅改变外观，底层文字仍可提取；不用于敏感信息脱敏。' if self.tool=='cover' else '')
-        if self.tool=='cover':self.color.set('白色')
+        if self.tool=='select':self.note.set('点击原有文字或图片，在右侧修改属性')
+        elif self.tool in ('highlight','underline','strike','note','rectangle','arrow'):self.note.set('拖动框选需要标注的区域')
     def schedule_render(self):
         if self.render_job:self.after_cancel(self.render_job)
         self.render_job=self.after(100,self.render)
@@ -132,13 +134,14 @@ class PDFEditor(ttk.Frame):
         sw,sh=max(c.winfo_width(),w+40),max(c.winfo_height(),h+40)
         self.origin=((sw-w)/2,(sh-h)/2);self.display_size=(w,h)
         c.configure(scrollregion=(0,0,sw,sh));c.create_image(*self.origin,image=self.photo,anchor='nw')
-        self.page_label.set(f'{self.index+1} / {len(self.model)}')
+        self.page_label.set(f'{self.index+1} / {len(self.model)}');self.draw_selection();self.paint_hits()
     def fit(self):self.zoom=None;self.schedule_render();self.canvas.xview_moveto(0);self.canvas.yview_moveto(0)
     def magnify(self,factor):
         if self.model:self.zoom=max(.05,min(3,(self.factor if self.zoom is None else self.zoom)*factor));self.schedule_render()
     def point(self,event):return (self.canvas.canvasx(event.x),self.canvas.canvasy(event.y))
     def press(self,event):
         if not self.model or self.app.busy:return
+        if self.tool=='select':self.hit_object(event);return
         if self.tool=='hand':self.canvas.scan_mark(event.x,event.y)
         else:self.drag=self.point(event)
     def motion(self,event):
@@ -151,6 +154,15 @@ class PDFEditor(ttk.Frame):
         rect=((min(a[0],b[0])-ox)*pw/dw,(min(a[1],b[1])-oy)*ph/dh,(max(a[0],b[0])-ox)*pw/dw,(max(a[1],b[1])-oy)*ph/dh)
         if rect[2]-rect[0]<3 or rect[3]-rect[1]<3:return
         options={};kind=self.tool
+        if kind in ('highlight','underline','strike','note','rectangle','arrow'):
+            text=''
+            if kind=='note':
+                from tkinter import simpledialog
+                text=simpledialog.askstring('便签','批注内容：',parent=self)
+                if not text:return
+            try:self.model.annotate(self.index,rect,kind,text);self.refresh()
+            except Exception as e:messagebox.showerror('无法标注',str(e),parent=self)
+            return
         if kind=='text':
             from tkinter import simpledialog
             text=simpledialog.askstring('添加文字','输入文字：',parent=self)
